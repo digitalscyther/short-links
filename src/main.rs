@@ -58,7 +58,7 @@ async fn generate_link(
 
     let mut redis_conn = redis_connection(&state.redis_client).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let short_key = generate_and_save_key(&mut redis_conn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let short_key = generate_key(&mut redis_conn).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let token = rand_string(24);
 
     let short_url = format!("{scheme}://{hostname}/{short_key}");
@@ -81,7 +81,7 @@ fn log_err<T: std::fmt::Display>(tag: &str, err: T) -> StatusCode {
     StatusCode::INTERNAL_SERVER_ERROR
 }
 
-async fn generate_and_save_key(
+async fn generate_key(
     redis_conn: &mut redis::aio::MultiplexedConnection
 ) -> Result<String, String> {
     for attempt in 0..3 {
