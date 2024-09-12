@@ -35,8 +35,7 @@ struct StatsQuery {
 
 
 async fn redis_connection(redis_client: &redis::Client) -> RedisResult<redis::aio::MultiplexedConnection> {
-    redis_client
-        .get_multiplexed_async_connection().await
+    redis_client.get_multiplexed_async_connection().await
 }
 
 async fn generate_link(
