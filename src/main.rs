@@ -15,7 +15,7 @@ use axum::http::Request;
 use axum::response::Redirect;
 use rand::distr::Alphanumeric;
 use rand::Rng;
-use tracing::{error, info};
+use tracing::{error, info, Level};
 
 #[derive(Deserialize)]
 struct CreateLinkRequest {
@@ -65,14 +65,21 @@ async fn generate_link(
     let short_url = format!("{scheme}://{hostname}/{short_key}");
     let stats_url = format!("{short_url}/stats?token={token}");
 
-    redis_conn.hset(&short_key, "url", payload.url).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    redis_conn.hset(&short_key, "token", token).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    redis_conn.hset(&short_key, "clicks", 0).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    redis_conn.hset(&short_key, "url", "").await.map_err(|e| log_err("0", e))?;
+    redis_conn.expire(&short_key, 60 * 60 * 24 * 30).await.map_err(|e| log_err("1", e))?;
+    redis_conn.hset(&short_key, "url", payload.url).await.map_err(|e| log_err("2", e))?;
+    redis_conn.hset(&short_key, "token", token).await.map_err(|e| log_err("3", e))?;
+    redis_conn.hset(&short_key, "clicks", 0).await.map_err(|e| log_err("4", e))?;
 
     Ok(Json(CreateLinkResponse {
         short_url,
         stats_url,
     }))
+}
+
+fn log_err<T: std::fmt::Display>(tag: &str, err: T) -> StatusCode {
+    error!("{} - error - {}", tag, err);
+    StatusCode::INTERNAL_SERVER_ERROR
 }
 
 async fn generate_and_save_key(
@@ -87,9 +94,6 @@ async fn generate_and_save_key(
         })?;
 
         if !key_exists {
-            redis_conn.hset(&short_key, "url", "").await.map_err(|e| format!("{:?}", e))?;
-            redis_conn.expire(&short_key, 60 * 60 * 24 * 30).await.map_err(|e| format!("{:?}", e))?;
-
             return Ok(short_key);
         }
 
@@ -152,6 +156,11 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(Level::ERROR)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())// Log only errors and above
+        .init();
+
     let redis_url = env::var("REDIS_URL").unwrap_or("redis://127.0.0.1/".to_string());
     let redis_client = redis::Client::open(redis_url).unwrap();
     let app_state = AppState { redis_client };
